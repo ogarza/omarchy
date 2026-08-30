@@ -161,17 +161,18 @@ hl.on("workspace.move_to_monitor", function(ws, mon)
 end)
 
 -- The panel is only centered while the console holds one tiled window, so the
--- count has to be rechecked as tiled apps come and go. These are the two events
--- that run after the workspace's count has already moved: window.close and
--- window.move_to_workspace still count the window on its way out, and refitting
--- from those would read one too many and leave the console full width.
+-- count has to be rechecked as tiled apps come and go. window.close still
+-- counts the window on its way out; window.open, window.destroy, and
+-- window.move_to_workspace run after membership has already moved
+-- (moveToWorkspace writes m_workspace before it emits).
 --
 -- Only while it is on screen, though. A hidden console is refitted on its way in
 -- by workspace.special_active, and every window opened anywhere on the desktop
 -- would otherwise rewrite the rule.
 --
--- Toggling floating also changes the tiled count, and is not an open or a
--- destroy.
+-- Toggling floating is not an open or a destroy. It does re-apply window rules,
+-- so window.update_rules covers Super+T and Super+O. Hyprland has a C++
+-- window.floating signal that Lua does not expose.
 local function recount()
   local ws = hl.get_workspace(SCRATCHPAD)
   if ws and ws.visible then
@@ -179,12 +180,10 @@ local function recount()
   end
 end
 
--- So a float toggle can recount without an event for it.
-o = o or {}
-o.qconsole_recount = recount
-
 hl.on("window.open", recount)
 hl.on("window.destroy", recount)
+hl.on("window.move_to_workspace", recount)
+hl.on("window.update_rules", recount)
 
 -- The direction names the edge the offset is measured from, not where the
 -- workspace goes: "slide top" drops it down into view, and "slide bottom"

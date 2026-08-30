@@ -230,19 +230,40 @@ top, right, bottom, left = gaps()
 assert(left == 435 and right == 435, "a floating utility on the scratchpad keeps the panel")
 assert(bottom == 525, "and the console keeps its half-height drop")
 
--- Tiling that float is not an open or a destroy, so the hooks above would
--- leave the panel boxed until the console was toggled. The float toggle
--- calls o.qconsole_recount after.
-assert(type(o.qconsole_recount) == "function", "a float toggle can recount")
+-- Super+Shift+1 / Super+Alt+S are moves, not opens or destroys. The window is
+-- already on the destination workspace when move_to_workspace fires.
 workspace.clients = { { floating = false }, { floating = false } }
 workspace.windows = 2
-o.qconsole_recount()
+handlers["window.open"]()
+top, right, bottom, left = gaps()
+assert(left == 0 and right == 0, "two tiled apps still stretch before a move")
+
+workspace.clients = { { floating = false } }
+workspace.windows = 1
+handlers["window.move_to_workspace"]()
+top, right, bottom, left = gaps()
+assert(left == 435 and right == 435, "moving a tiled window off the open console recenters the panel")
+
+workspace.clients = { { floating = false }, { floating = false } }
+workspace.windows = 2
+handlers["window.move_to_workspace"]()
+top, right, bottom, left = gaps()
+assert(left == 0 and right == 0, "moving a tiled window onto the open console restores the full width")
+
+-- Tiling a float is not an open or a destroy. It re-applies window rules, so
+-- window.update_rules is the event Super+T and Super+O ride.
+workspace.clients = { { floating = false }, { floating = true } }
+workspace.windows = 2
+handlers["window.open"]()
+workspace.clients = { { floating = false }, { floating = false } }
+workspace.windows = 2
+handlers["window.update_rules"]()
 top, right, bottom, left = gaps()
 assert(left == 0 and right == 0, "tiling a float on the open console restores the full width")
 
 workspace.clients = { { floating = false }, { floating = true } }
 workspace.windows = 2
-o.qconsole_recount()
+handlers["window.update_rules"]()
 top, right, bottom, left = gaps()
 assert(left == 435 and right == 435, "floating a tiled window on the open console recenters the panel")
 
@@ -271,17 +292,11 @@ handlers["monitor.layout_changed"]()
 top, right, bottom, left = gaps()
 assert(left == 420 and right == 420 and bottom == 540, "a scratchpad that does not exist yet is sized as a console")
 
--- window.close and window.move_to_workspace both run while the workspace still
--- counts the window that is leaving, so a refit from either reads one too many
--- and strands the console at full width. window.open and window.destroy are the
--- two that run after the count has already moved, and are the only ones hooked.
+-- window.close still counts the window on its way out, so a refit from it reads
+-- one too many and strands the console at full width. Membership is chased on
+-- open, destroy, move, and rule updates instead.
 assert(handlers["window.close"] == nil, "window.close counts the window on its way out")
-assert(handlers["window.move_to_workspace"] == nil, "window.move_to_workspace does too")
+assert(handlers["window.move_to_workspace"] ~= nil, "a move onto or off the open console recounts")
+assert(handlers["window.update_rules"] ~= nil, "a float toggle recounts by re-applying rules")
 LUA
 pass "the console is a centered panel until a second tiled app joins it"
-
-grep -q 'o.qconsole_recount()' "$ROOT/default/hypr/bindings/tiling.lua" || fail "the float toggle recounts the console"
-pass "the float toggle recounts the console"
-
-grep -q 'o.qconsole_recount()' "$ROOT/bin/omarchy-hyprland-window-pop" || fail "popping a window recounts the console after a float toggle"
-pass "popping a window recounts the console after a float toggle"
