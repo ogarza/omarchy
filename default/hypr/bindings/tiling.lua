@@ -4,7 +4,14 @@ o.bind("CTRL + ALT + DELETE", "Close all windows", "omarchy-hyprland-window-clos
 
 o.bind("SUPER + J", "Toggle window split", hl.dsp.layout("togglesplit"))
 o.bind("SUPER + P", "Pseudo window", hl.dsp.window.pseudo())
-o.bind("SUPER + T", "Toggle window floating/tiling", hl.dsp.window.float({ action = "toggle" }))
+-- Super+T is not a window.open, so qconsole.lua would otherwise keep the old
+-- gaps until the console was toggled. Recount after the toggle lands.
+o.bind("SUPER + T", "Toggle window floating/tiling", function()
+  hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  if o.qconsole_recount then
+    o.qconsole_recount()
+  end
+end)
 o.bind("SUPER + F", "Full screen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 o.bind("SUPER + CTRL + F", "Tiled full screen", "omarchy-hyprland-window-tiled-fullscreen-toggle")
 o.bind("SUPER + ALT + F", "Full width", hl.dsp.window.fullscreen({ mode = "maximized" }))

@@ -38,3 +38,7 @@ elif [[ -n $addr ]]; then
   hypr_dispatch "hl.dsp.window.alter_zorder({ window = \"$window\", mode = \"top\" })" alterzorder top "$window"
   hypr_dispatch "hl.dsp.window.tag({ window = \"$window\", tag = \"+pop\" })" tagwindow +pop "$window"
 fi
+
+# Toggling floating is not a window event, so the console would keep its old
+# gaps until it was closed. Recount after the pop lands.
+hyprctl dispatch "function() o.qconsole_recount() end" >/dev/null 2>&1 || true

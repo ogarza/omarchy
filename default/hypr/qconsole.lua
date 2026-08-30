@@ -5,10 +5,11 @@
 -- How much of the usable screen the console covers, measured from the top.
 local share = 0.5
 
--- A console holding a single window is boxed into a centered panel this many
--- times wider than it is tall, rather than stretched the width of the screen.
--- A second app on the scratchpad gets the full width back: two windows splitting
--- a half-width column is worse than the band this replaced.
+-- A console holding a single tiled window is boxed into a centered panel this
+-- many times wider than it is tall, rather than stretched the width of the
+-- screen. A second tiled app on the scratchpad gets the full width back: two
+-- windows splitting a half-width column is worse than the band this replaced.
+-- A floating window does not count toward that.
 local box = 2
 
 local SCRATCHPAD = "special:scratchpad"
@@ -62,11 +63,12 @@ local function cover(side, bottom)
   return true
 end
 
--- One window reads as a console and gets the panel. A second app has turned the
--- scratchpad into a workspace, and a workspace wants the whole width.
+-- One tiled window reads as a console and gets the panel. A second tiled app
+-- has turned the scratchpad into a workspace, and a workspace wants the whole
+-- width.
 local function alone()
   local ws = hl.get_workspace(SCRATCHPAD)
-  return not ws or ws.windows <= 1
+  return not ws or #hl.get_windows({ workspace = SCRATCHPAD, floating = false }) <= 1
 end
 
 -- Sizing the console with a window rule would freeze it at whatever the screen
@@ -158,21 +160,28 @@ hl.on("workspace.move_to_monitor", function(ws, mon)
   end
 end)
 
--- The panel is only centered while the console holds one window, so the count
--- has to be rechecked as apps come and go. These are the two events that run
--- after the workspace's count has already moved: window.close and
+-- The panel is only centered while the console holds one tiled window, so the
+-- count has to be rechecked as tiled apps come and go. These are the two events
+-- that run after the workspace's count has already moved: window.close and
 -- window.move_to_workspace still count the window on its way out, and refitting
 -- from those would read one too many and leave the console full width.
 --
 -- Only while it is on screen, though. A hidden console is refitted on its way in
 -- by workspace.special_active, and every window opened anywhere on the desktop
 -- would otherwise rewrite the rule.
+--
+-- Toggling floating also changes the tiled count, and is not an open or a
+-- destroy.
 local function recount()
   local ws = hl.get_workspace(SCRATCHPAD)
   if ws and ws.visible then
     refit()
   end
 end
+
+-- So a float toggle can recount without an event for it.
+o = o or {}
+o.qconsole_recount = recount
 
 hl.on("window.open", recount)
 hl.on("window.destroy", recount)

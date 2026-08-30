@@ -10,7 +10,7 @@ require_command lua
 # on a scaled display, so it is worth pinning down.
 # base-test.sh does not set -e, so the assertions have to fail the file
 # themselves rather than leaving the pass below to run regardless.
-OMARCHY_PATH="$ROOT" lua - <<'LUA' || fail "the console is a centered panel until a second app joins it"
+OMARCHY_PATH="$ROOT" lua - <<'LUA' || fail "the console is a centered panel until a second tiled app joins it"
 local rules, handlers = {}, {}
 local monitor = nil
 local workspace = nil
@@ -22,6 +22,21 @@ hl = {
   on = function(event, callback) handlers[event] = callback end,
   get_active_monitor = function() return monitor end,
   get_workspace = function() return workspace end,
+  -- Mirrors Hyprland 0.56.2: mapped windows on the queried workspace, filtered
+  -- by floating when that key is set. The suite only has one workspace fixture.
+  get_windows = function(filters)
+    local list = {}
+    if not workspace then
+      return list
+    end
+    filters = filters or {}
+    for _, win in ipairs(workspace.clients or {}) do
+      if filters.floating == nil or win.floating == filters.floating then
+        table.insert(list, win)
+      end
+    end
+    return list
+  end,
   exec_scheduled_prop_refresh_immediately = function() end,
 }
 
@@ -160,7 +175,7 @@ assert(1920 - left - right > 0 and 1080 - 30 - bottom > 0, "1080p leftover is ne
 
 -- follow_mouse onto the 6K while the console is already showing on 1080p must
 -- not steal the rule; that is what oversized the Dell after a hop.
-workspace = { name = "special:scratchpad", visible = true, monitor = acer, windows = 1 }
+workspace = { name = "special:scratchpad", visible = true, monitor = acer, windows = 1, clients = { { floating = false } } }
 monitor = dell
 written = #rules
 handlers["monitor.focused"](dell)
@@ -170,7 +185,7 @@ assert(#rules == written, "focus on another output does not rewrite an open cons
 -- handle then answers nil to everything, and preferring it blindly would leave
 -- the console stranded at the gaps of the monitor that is gone. The rule is
 -- still the 1080p one here, so only refitting on the Dell can satisfy this.
-workspace = { name = "special:scratchpad", visible = true, monitor = expired, windows = 1 }
+workspace = { name = "special:scratchpad", visible = true, monitor = expired, windows = 1, clients = { { floating = false } } }
 monitor = dell
 handlers["monitor.layout_changed"]()
 top, right, bottom, left = gaps()
@@ -178,32 +193,62 @@ assert(left == 1807 and right == 1807 and bottom == 1265,
   "a console whose output vanished refits on the monitor that is still there")
 
 -- Back onto the 1080p panel for the window-count checks below.
-workspace = { name = "special:scratchpad", visible = true, monitor = acer, windows = 1 }
+workspace = { name = "special:scratchpad", visible = true, monitor = acer, windows = 1, clients = { { floating = false } } }
 monitor = acer
 handlers["monitor.layout_changed"]()
 top, right, bottom, left = gaps()
 assert(left == 435 and right == 435 and bottom == 525, "and refits again once it is back on a live output")
 
--- One window reads as a console and keeps the panel. A second app has turned
--- the scratchpad into a workspace, and a workspace wants the whole width.
-workspace = { name = "special:scratchpad", visible = true, monitor = acer, windows = 2 }
+-- One tiled window reads as a console and keeps the panel. A second tiled app
+-- has turned the scratchpad into a workspace, and a workspace wants the whole
+-- width.
+workspace.clients = { { floating = false }, { floating = false } }
+workspace.windows = 2
 handlers["window.open"]()
 top, right, bottom, left = gaps()
-assert(left == 0 and right == 0, "a second app on the scratchpad restores the full width")
+assert(left == 0 and right == 0, "a second tiled app on the scratchpad restores the full width")
 assert(bottom == 525, "and the console keeps its half-height drop")
 
+workspace.clients = { { floating = false }, { floating = false }, { floating = false } }
 workspace.windows = 3
 written = #rules
 handlers["window.open"]()
-assert(#rules == written, "a third app changes nothing that is already full width")
+assert(#rules == written, "a third tiled app changes nothing that is already full width")
 
+workspace.clients = { { floating = false } }
 workspace.windows = 1
 handlers["window.destroy"]()
 top, right, bottom, left = gaps()
-assert(left == 435 and right == 435, "closing back down to one window recenters the panel")
+assert(left == 435 and right == 435, "closing back down to one tiled window recenters the panel")
+
+-- A floating window opening on the scratchpad makes the mapped total 2,
+-- which is what used to stretch the panel; only the tiled count should.
+workspace.clients = { { floating = false }, { floating = true } }
+workspace.windows = 2
+handlers["window.open"]()
+top, right, bottom, left = gaps()
+assert(left == 435 and right == 435, "a floating utility on the scratchpad keeps the panel")
+assert(bottom == 525, "and the console keeps its half-height drop")
+
+-- Tiling that float is not an open or a destroy, so the hooks above would
+-- leave the panel boxed until the console was toggled. The float toggle
+-- calls o.qconsole_recount after.
+assert(type(o.qconsole_recount) == "function", "a float toggle can recount")
+workspace.clients = { { floating = false }, { floating = false } }
+workspace.windows = 2
+o.qconsole_recount()
+top, right, bottom, left = gaps()
+assert(left == 0 and right == 0, "tiling a float on the open console restores the full width")
+
+workspace.clients = { { floating = false }, { floating = true } }
+workspace.windows = 2
+o.qconsole_recount()
+top, right, bottom, left = gaps()
+assert(left == 435 and right == 435, "floating a tiled window on the open console recenters the panel")
 
 -- An empty scratchpad is about to be seeded with a single agent, so it is sized
 -- as a console rather than as a workspace.
+workspace.clients = {}
 workspace.windows = 0
 handlers["window.destroy"]()
 top, right, bottom, left = gaps()
@@ -212,7 +257,7 @@ assert(left == 435 and right == 435, "an empty console is still a console")
 -- A hidden console is refitted on its way back in, so the count does not have to
 -- be chased while it is off screen; every window on the desktop would otherwise
 -- rewrite the rule.
-workspace = { name = "special:scratchpad", visible = false, monitor = acer, windows = 4 }
+workspace = { name = "special:scratchpad", visible = false, monitor = acer, clients = { { floating = false }, { floating = false }, { floating = false }, { floating = false } }, windows = 4 }
 monitor = dell
 written = #rules
 handlers["window.open"]()
@@ -233,4 +278,10 @@ assert(left == 420 and right == 420 and bottom == 540, "a scratchpad that does n
 assert(handlers["window.close"] == nil, "window.close counts the window on its way out")
 assert(handlers["window.move_to_workspace"] == nil, "window.move_to_workspace does too")
 LUA
-pass "the console is a centered panel until a second app joins it"
+pass "the console is a centered panel until a second tiled app joins it"
+
+grep -q 'o.qconsole_recount()' "$ROOT/default/hypr/bindings/tiling.lua" || fail "the float toggle recounts the console"
+pass "the float toggle recounts the console"
+
+grep -q 'o.qconsole_recount()' "$ROOT/bin/omarchy-hyprland-window-pop" || fail "popping a window recounts the console after a float toggle"
+pass "popping a window recounts the console after a float toggle"

@@ -66,7 +66,7 @@ Finally, there's a special scratchpad workspace that drops down over whatever wo
 
 It works especially well for a terminal running an agent, or for controls you want to interact with quickly without leaving the current workspace. To move a window off the scratchpad, send it directly to another workspace with something like `Super + Shift + 1`.
 
-While the scratchpad holds a single window, it drops down as a centered panel rather than spanning the screen. Put a second app on it and it goes back to the full width, so the two have room to sit side by side.
+While the scratchpad holds a single tiled window, it drops down as a centered panel rather than spanning the screen. Put a second tiled app on it and it goes back to the full width, so the two have room to sit side by side. A floating window on top of that one, like btop or fastfetch, leaves the panel as it is.
 
 ### It takes some getting used to!
 
