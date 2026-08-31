@@ -407,6 +407,19 @@ workspace.monitor = acer
 assert(#moves == 1, "an overflowing hop still moves once")
 assert(moves[1].x == 834 and moves[1].y == 53, "the overflow is clamped onto the destination work area")
 
+-- A float too wide for the destination cannot be fitted at all, so it keeps its
+-- origin edge on screen rather than its far edge: pinned to the left, not hung
+-- off it.
+handlers["workspace.special_active"]({ name = "special:scratchpad" }, dell)
+workspace.monitor = dell
+float.at = { x = 3000, y = 130 }
+float.size = { x = 2400, y = 400 }
+moves = {}
+handlers["workspace.special_active"]({ name = "special:scratchpad" }, acer)
+workspace.monitor = acer
+assert(#moves == 1, "a float wider than the destination still moves once")
+assert(moves[1].x == 0, "a float too wide to fit keeps its left edge on screen, not its right")
+
 -- A float in the dimmed margin stays in the margin rather than being sucked
 -- into the panel, as long as it still fits on the destination.
 float.at = { x = 50, y = 80 }
@@ -668,6 +681,24 @@ assert(#moves == 0, "a later toggle on that output is a same-output no-op")
 -- default.hypr module from package.loaded, so this file re-runs with the
 -- console's windows still placed but no memory of the output they are placed
 -- on, and the hop after it has to land where a hop without a reload does.
+-- The console is normally hidden when a monitor gets rescaled, and then nothing
+-- reports where it is: the workspace is not visible, and no output is tagged
+-- with it. The remembered output is the only handle on the console left, so the
+-- rescale has to be caught from there or the floats keep coordinates that no
+-- longer describe anything.
+local hidden = { name = "eDP-hidden", x = 0, y = 0, width = 2560, height = 1440, scale = 1, transform = 0, reserved = { top = 30, bottom = 0, left = 0, right = 0 } }
+workspace = { name = "special:scratchpad", visible = true, monitor = hidden, windows = 2, clients = { tiled, float } }
+monitor = hidden
+handlers["workspace.special_active"]({ name = "special:scratchpad" }, hidden)
+float.at = { x = 535, y = 80 }
+float.size = { x = 200, y = 100 }
+workspace.visible = false
+hidden.scale = 2
+moves = {}
+handlers["monitor.layout_changed"]()
+assert(#moves == 1, "a rescale while the console is hidden still remaps the float")
+assert(float.at.x == 244 and float.at.y == 52, "and maps it from the remembered output, since nothing else names one")
+
 -- The console is parked on acer while the pointer sits on dell, so recovering
 -- the output from hl.get_active_monitor() instead of the workspace would read
 -- the float's acer coordinates against dell's work area.
